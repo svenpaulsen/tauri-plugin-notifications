@@ -40,7 +40,6 @@ impl From<windows::core::Error> for crate::Error {
 /// Shared plugin state wrapped in Arc for thread-safe access.
 pub struct WindowsPlugin {
     app_id: String,
-    notifier: ToastNotifier,
     action_types: RwLock<HashMap<String, ActionType>>,
     click_listener_active: RwLock<bool>,
     #[cfg(feature = "push-notifications")]
@@ -56,6 +55,20 @@ impl std::fmt::Debug for WindowsPlugin {
 }
 
 impl WindowsPlugin {
+    /// Build a fresh `ToastNotifier` bound to the app's AUMID.
+    ///
+    /// Deliberately not cached: plugin `init()` runs at app startup,
+    /// possibly before the Windows notification platform is ready, and a
+    /// notifier obtained in that window can stay unusable for the whole
+    /// process lifetime — poisoning every notification of the session.
+    /// Building one per call is cheap and lets each call recover once the
+    /// platform is up.
+    fn notifier(&self) -> crate::Result<ToastNotifier> {
+        Ok(ToastNotificationManager::CreateToastNotifierWithId(
+            &HSTRING::from(&self.app_id),
+        )?)
+    }
+
     fn action_types(&self) -> crate::Result<HashMap<String, ActionType>> {
         Ok(self
             .action_types
@@ -136,11 +149,9 @@ pub fn init<R: Runtime, C: DeserializeOwned>(
     _api: PluginApi<R, C>,
 ) -> crate::Result<Notifications<R>> {
     let app_id = app.config().identifier.clone();
-    let notifier = ToastNotificationManager::CreateToastNotifierWithId(&HSTRING::from(&app_id))?;
 
     let plugin = Arc::new(WindowsPlugin {
         app_id,
-        notifier,
         action_types: RwLock::new(HashMap::new()),
         click_listener_active: RwLock::new(false),
         #[cfg(feature = "push-notifications")]
@@ -263,6 +274,8 @@ impl<R: Runtime> crate::NotificationsBuilder<R> {
         let tag = HSTRING::from(self.data.id.to_string());
         let group = self.data.group.as_ref().map(|g| HSTRING::from(g.as_str()));
 
+        let notifier = self.plugin.notifier()?;
+
         // Check if this is a scheduled notification
         if let Some(schedule) = &self.data.schedule {
             let delivery_time = schedule_to_datetime(schedule)?;
@@ -276,7 +289,7 @@ impl<R: Runtime> crate::NotificationsBuilder<R> {
                 scheduled.SetGroup(g)?;
             }
 
-            self.plugin.notifier.AddToSchedule(&scheduled)?;
+            notifier.AddToSchedule(&scheduled)?;
         } else {
             // Immediate notification
             let toast = ToastNotification::CreateToastNotification(&toast_xml)?;
@@ -348,7 +361,7 @@ impl<R: Runtime> crate::NotificationsBuilder<R> {
                 ))?;
             }
 
-            self.plugin.notifier.Show(&toast)?;
+            notifier.Show(&toast)?;
         }
 
         // Trigger notification event
@@ -448,7 +461,7 @@ impl<R: Runtime> Notifications<R> {
     }
 
     pub async fn permission_state(&self) -> crate::Result<PermissionState> {
-        match self.plugin.notifier.Setting()? {
+        match self.plugin.notifier()?.Setting()? {
             NotificationSetting::Enabled => Ok(PermissionState::Granted),
             NotificationSetting::DisabledForApplication
             | NotificationSetting::DisabledForUser
@@ -539,7 +552,7 @@ impl<R: Runtime> Notifications<R> {
     }
 
     pub async fn pending(&self) -> crate::Result<Vec<PendingNotification>> {
-        let scheduled = self.plugin.notifier.GetScheduledToastNotifications()?;
+        let scheduled = self.plugin.notifier()?.GetScheduledToastNotifications()?;
         let mut result = Vec::new();
 
         for i in 0..scheduled.Size()? {
@@ -592,7 +605,8 @@ impl<R: Runtime> Notifications<R> {
     }
 
     pub fn cancel(&self, notifications: Vec<i32>) -> crate::Result<()> {
-        let scheduled = self.plugin.notifier.GetScheduledToastNotifications()?;
+        let notifier = self.plugin.notifier()?;
+        let scheduled = notifier.GetScheduledToastNotifications()?;
         let ids_to_cancel: std::collections::HashSet<_> = notifications.into_iter().collect();
 
         for i in 0..scheduled.Size()? {
@@ -600,7 +614,7 @@ impl<R: Runtime> Notifications<R> {
                 if let Ok(tag) = notification.Tag() {
                     if let Ok(id) = tag.to_string_lossy().parse::<i32>() {
                         if ids_to_cancel.contains(&id) {
-                            if let Err(e) = self.plugin.notifier.RemoveFromSchedule(&notification) {
+                            if let Err(e) = notifier.RemoveFromSchedule(&notification) {
                                 log::error!("Failed to cancel notification {id}: {e}");
                             }
                         }
@@ -612,10 +626,11 @@ impl<R: Runtime> Notifications<R> {
     }
 
     pub fn cancel_all(&self) -> crate::Result<()> {
-        let scheduled = self.plugin.notifier.GetScheduledToastNotifications()?;
+        let notifier = self.plugin.notifier()?;
+        let scheduled = notifier.GetScheduledToastNotifications()?;
         for i in 0..scheduled.Size()? {
             if let Ok(notification) = scheduled.GetAt(i) {
-                if let Err(e) = self.plugin.notifier.RemoveFromSchedule(&notification) {
+                if let Err(e) = notifier.RemoveFromSchedule(&notification) {
                     log::error!("Failed to cancel scheduled notification: {e}");
                 }
             }
