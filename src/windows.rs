@@ -10,7 +10,7 @@ use tauri::{
 };
 use windows::core::{Interface, HSTRING};
 use windows::Data::Xml::Dom::XmlDocument;
-use windows::Foundation::{DateTime, TypedEventHandler};
+use windows::Foundation::{DateTime, IPropertyValue, TypedEventHandler};
 #[cfg(feature = "push-notifications")]
 use windows::Networking::PushNotifications::{
     PushNotificationChannel, PushNotificationChannelManager,
@@ -232,10 +232,37 @@ impl<R: Runtime> crate::NotificationsBuilder<R> {
         if let Some(action_type_id) = &self.data.action_type_id {
             if let Some(action_type) = action_types.get(action_type_id) {
                 let actions = doc.CreateElement(&HSTRING::from("actions"))?;
+
+                // The toast schema requires <input> elements ahead of
+                // <action> elements, so emit text inputs in a first pass.
+                for action in action_type.actions() {
+                    if action.input() {
+                        let input_el = doc.CreateElement(&HSTRING::from("input"))?;
+                        input_el.SetAttribute(&HSTRING::from("id"), &HSTRING::from(action.id()))?;
+                        input_el
+                            .SetAttribute(&HSTRING::from("type"), &HSTRING::from("text"))?;
+                        if let Some(placeholder) = action.input_placeholder() {
+                            input_el.SetAttribute(
+                                &HSTRING::from("placeHolderContent"),
+                                &HSTRING::from(placeholder),
+                            )?;
+                        }
+                        actions.AppendChild(&input_el)?;
+                    }
+                }
+
                 for action in action_type.actions() {
                     let action_el = doc.CreateElement(&HSTRING::from("action"))?;
+                    // For a text-input action the button label is the
+                    // input button title (e.g. "Send"); plain actions use
+                    // their own title.
+                    let content = if action.input() {
+                        action.input_button_title().unwrap_or(action.title())
+                    } else {
+                        action.title()
+                    };
                     action_el
-                        .SetAttribute(&HSTRING::from("content"), &HSTRING::from(action.title()))?;
+                        .SetAttribute(&HSTRING::from("content"), &HSTRING::from(content))?;
                     action_el
                         .SetAttribute(&HSTRING::from("arguments"), &HSTRING::from(action.id()))?;
                     let activation_type = if action.foreground() {
@@ -247,6 +274,14 @@ impl<R: Runtime> crate::NotificationsBuilder<R> {
                         &HSTRING::from("activationType"),
                         &HSTRING::from(activation_type),
                     )?;
+                    // `hint-inputId` pairs the button with its <input> so
+                    // Windows renders them inline (text field + button).
+                    if action.input() {
+                        action_el.SetAttribute(
+                            &HSTRING::from("hint-inputId"),
+                            &HSTRING::from(action.id()),
+                        )?;
+                    }
                     actions.AppendChild(&action_el)?;
                 }
                 toast.AppendChild(&actions)?;
@@ -327,12 +362,22 @@ impl<R: Runtime> crate::NotificationsBuilder<R> {
                                 let action_id = if arguments.is_empty() {
                                     "tap".to_string()
                                 } else {
-                                    arguments.to_string()
+                                    arguments.clone()
+                                };
+
+                                // A text-reply action carries the typed
+                                // text in UserInput, keyed by the <input>
+                                // id (which build_toast_xml sets to the
+                                // action id).
+                                let input_value = if arguments.is_empty() {
+                                    None
+                                } else {
+                                    extract_user_input(&activated, &arguments)
                                 };
 
                                 let payload = serde_json::json!({
                                     "actionId": action_id,
-                                    "inputValue": null,
+                                    "inputValue": input_value,
                                     "notification": notification,
                                 });
                                 if let Err(e) = crate::listeners::trigger(
@@ -378,6 +423,21 @@ impl<R: Runtime> crate::NotificationsBuilder<R> {
 
         Ok(())
     }
+}
+
+/// Extract a toast text-box reply from `ToastActivatedEventArgs.UserInput`.
+///
+/// Returns `None` when the activated action carried no text input. The
+/// `UserInput` map is keyed by `<input>` id, which `build_toast_xml` sets
+/// to the action id.
+fn extract_user_input(activated: &ToastActivatedEventArgs, input_id: &str) -> Option<String> {
+    let value = activated
+        .UserInput()
+        .ok()?
+        .Lookup(&HSTRING::from(input_id))
+        .ok()?;
+    let text = value.cast::<IPropertyValue>().ok()?.GetString().ok()?;
+    Some(text.to_string_lossy())
 }
 
 /// Convert Schedule to Windows DateTime.
