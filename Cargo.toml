@@ -29,7 +29,7 @@ time = { version = "0.3", features = ["serde", "parsing", "formatting"] }
 url = { version = "2", features = ["serde"] }
 
 [target.'cfg(target_os = "ios")'.dependencies]
-tauri = { version = "2", features = ["wry"] }
+tauri = { version = "2.11.4", features = ["wry"] }
 
 [target.'cfg(target_os = "macos")'.dependencies]
 swift-bridge = { version = "0.1", features = ["async"] }
