@@ -1,18 +1,9 @@
-import java.util.Properties
-import java.io.FileInputStream
 import org.jetbrains.kotlin.gradle.dsl.JvmTarget
 
 plugins {
     id("com.android.library")
     id("org.jetbrains.kotlin.android")
     id("jacoco")
-}
-
-val buildProperties = Properties().apply {
-    val propFile = file("build.properties")
-    if (propFile.exists()) {
-        propFile.inputStream().use { load(it) }
-    }
 }
 
 android {
@@ -25,9 +16,9 @@ android {
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
         consumerProguardFiles("consumer-rules.pro")
 
-        // Enable push notifications based on Cargo feature flag
-        val enablePush = buildProperties.getProperty("enablePushNotifications", "false").toBoolean()
-        buildConfigField("boolean", "ENABLE_PUSH_NOTIFICATIONS", "$enablePush")
+        // Push support is always compiled in; availability is gated at
+        // runtime by the Rust-side `push-notifications` cargo feature.
+        buildConfigField("boolean", "ENABLE_PUSH_NOTIFICATIONS", "true")
     }
 
     buildTypes {

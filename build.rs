@@ -27,35 +27,13 @@ const COMMANDS: &[&str] = &[
 ];
 
 fn main() {
-    // Check if push-notifications feature is enabled
-    let enable_push = cfg!(feature = "push-notifications");
-
-    // Generate build.properties file for Android
-    if std::env::var("TARGET")
-        .unwrap_or_default()
-        .contains("android")
-    {
-        let properties_content = format!("enablePushNotifications={enable_push}");
-        std::fs::write("android/build.properties", properties_content)
-            .expect("Failed to write build.properties");
-    }
-
-    // Generate marker file for iOS/macOS Swift build
-    // Package.swift reads this file to conditionally enable ENABLE_PUSH_NOTIFICATIONS
-    let ios_marker_path = std::path::Path::new("ios/.push-notifications-enabled");
-    let macos_marker_path = std::path::Path::new("macos/.push-notifications-enabled");
-    if enable_push {
-        std::fs::write(ios_marker_path, "").expect("Failed to write iOS push marker file");
-        std::fs::write(macos_marker_path, "").expect("Failed to write macOS push marker file");
-    } else {
-        if ios_marker_path.exists() {
-            std::fs::remove_file(ios_marker_path).ok();
-        }
-        if macos_marker_path.exists() {
-            std::fs::remove_file(macos_marker_path).ok();
-        }
-    }
-
+    // Native push support is always compiled in; whether push is actually
+    // available is decided solely by the Rust-side `push-notifications`
+    // feature gates. Communicating the feature state to the native build
+    // systems via generated files proved unreliable: the files live in the
+    // shared cargo checkout, so builds for different targets clobbered each
+    // other, and Xcode/Gradle evaluate their manifests before this script
+    // runs on a fresh checkout.
     let result = tauri_plugin::Builder::new(COMMANDS)
         .android_path("android")
         .ios_path("ios")

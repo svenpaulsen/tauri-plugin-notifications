@@ -1,18 +1,10 @@
 // swift-tools-version:5.5
 
 import PackageDescription
-import Foundation
 
-// Check if push notifications feature is enabled via marker file from Rust build
-let enablePushNotifications = FileManager.default.fileExists(
-  atPath: URL(fileURLWithPath: #file).deletingLastPathComponent()
-    .appendingPathComponent(".push-notifications-enabled").path
-)
-
-var swiftSettings: [SwiftSetting] = []
-if enablePushNotifications {
-  swiftSettings.append(.define("ENABLE_PUSH_NOTIFICATIONS"))
-}
+// Push support is always compiled in; availability is gated at runtime by
+// the Rust-side `push-notifications` cargo feature.
+let swiftSettings: [SwiftSetting] = [.define("ENABLE_PUSH_NOTIFICATIONS")]
 
 let package = Package(
   name: "tauri-plugin-notifications",

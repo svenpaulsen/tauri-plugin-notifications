@@ -11,4 +11,3 @@ DerivedData/
 .swiftpm
 Package.resolved
 coverage.json
-.push-notifications-enabled

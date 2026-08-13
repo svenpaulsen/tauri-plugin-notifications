@@ -4,21 +4,15 @@
 import PackageDescription
 import Foundation
 
-// Check if push notifications feature is enabled via marker file from Rust build
-let enablePushNotifications = FileManager.default.fileExists(
-  atPath: URL(fileURLWithPath: #file).deletingLastPathComponent()
-    .appendingPathComponent(".push-notifications-enabled").path
-)
-
-var swiftSettings: [SwiftSetting] = [
+// Push support is always compiled in; availability is gated at runtime by
+// the Rust-side `push-notifications` cargo feature.
+let swiftSettings: [SwiftSetting] = [
     .unsafeFlags([
         "-import-objc-header", "\(Context.packageDirectory)/Sources/bridging-header.h",
         "-disable-bridging-pch"
-    ])
+    ]),
+    .define("ENABLE_PUSH_NOTIFICATIONS")
 ]
-if enablePushNotifications {
-  swiftSettings.append(.define("ENABLE_PUSH_NOTIFICATIONS"))
-}
 
 let package = Package(
     name: "tauri-plugin-notifications",
