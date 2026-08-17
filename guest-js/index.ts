@@ -335,7 +335,10 @@ interface PendingNotification {
 interface ActiveNotification {
   /** Notification identifier. */
   id: number;
-  /** Optional tag for the notification. */
+  /**
+   * Optional tag for the notification. On iOS this is the request
+   * identifier, which `removeActive` needs to address a pushed one.
+   */
   tag?: string;
   /** Notification title. */
   title?: string;
@@ -357,6 +360,19 @@ interface ActiveNotification {
   schedule?: Schedule;
   /** The sound resource name. */
   sound?: string;
+  /**
+   * Where the notification came from (iOS only).
+   * - `"push"` — displayed from a remote push (FCM/APNs).
+   * - `"local"` — created locally (immediate or scheduled).
+   */
+  source?: "push" | "local";
+  /**
+   * `Notification.when` in milliseconds (Android only): the event time a
+   * push carried as `event_time`, or the post time when it carried none.
+   * Unlike `data` it survives on a notification the FCM SDK displayed
+   * itself while the app was in the background.
+   */
+  when?: number;
 }
 
 /**
@@ -587,16 +603,26 @@ async function active(): Promise<ActiveNotification[]> {
 /**
  * Removes the active notifications with the given list of identifiers.
  *
+ * Pass the `tag` reported by {@link active} along: a notification
+ * displayed from a push cannot be addressed by `id` alone on either
+ * platform.
+ *
+ * `maxWhen` makes the removal conditional: the notification is left alone
+ * when the one currently displayed under that identifier is newer. Since
+ * a notification that collapses keeps its identifier when a later one
+ * replaces it, a caller working from an earlier {@link active} would
+ * otherwise remove the replacement.
+ *
  * @example
  * ```typescript
  * import { removeActive } from '@choochmeque/tauri-plugin-notifications-api';
- * await removeActive([{ id: 1 }, { id: 2, tag: 'news' }]);
+ * await removeActive([{ id: 1 }, { id: 2, tag: 'news', maxWhen: 1739452800000 }]);
  * ```
  *
  * @returns A promise indicating the success or failure of the operation.
  */
 async function removeActive(
-  notifications: Array<{ id: number; tag?: string }>,
+  notifications: Array<{ id: number; tag?: string; maxWhen?: number }>,
 ): Promise<void> {
   await invoke("plugin:notifications|remove_active", { notifications });
 }
@@ -688,6 +714,32 @@ async function onNotificationReceived(
   cb: (notification: Options) => void,
 ): Promise<PluginListener> {
   return await addPluginListener("notifications", "notification", cb);
+}
+
+/**
+ * Registers a listener for incoming push messages.
+ *
+ * Complements {@link onNotificationReceived}, which reports a normalized
+ * notification: this one hands over the raw payload as the platform
+ * delivered it, and fires for data-only pushes that carry no notification
+ * to normalize at all. On Android the FCM `data` map sits under `data`,
+ * on iOS the APNs `userInfo` fields are at the top level next to `aps`.
+ *
+ * @example
+ * ```typescript
+ * import { onPushMessage } from '@choochmeque/tauri-plugin-notifications-api';
+ * const unlisten = await onPushMessage((message) => {
+ *   console.log('Push message received:', message);
+ * });
+ * ```
+ *
+ * @param cb - Callback function to handle push messages.
+ * @returns A promise resolving to a function that removes the listener.
+ */
+async function onPushMessage(
+  cb: (message: Record<string, unknown>) => void,
+): Promise<PluginListener> {
+  return await addPluginListener("notifications", "push-message", cb);
 }
 
 /**
@@ -798,6 +850,7 @@ export {
   removeChannel,
   channels,
   onNotificationReceived,
+  onPushMessage,
   onAction,
   onNotificationClicked,
   Schedule,

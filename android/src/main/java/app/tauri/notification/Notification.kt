@@ -9,6 +9,7 @@ import android.service.notification.StatusBarNotification
 import androidx.annotation.RequiresApi
 import app.tauri.annotation.InvokeArg
 import app.tauri.plugin.JSObject
+import com.fasterxml.jackson.annotation.JsonProperty
 import com.fasterxml.jackson.core.JsonParser
 import com.fasterxml.jackson.databind.DeserializationContext
 import com.fasterxml.jackson.databind.JsonDeserializer
@@ -135,6 +136,9 @@ class Notification {
           group = notification?.group
           groupSummary = notification?.let { 0 != it.flags and android.app.Notification.FLAG_GROUP_SUMMARY } ?: false
           data = extractedData
+          // Set from the payload's event_time, and unlike the data map it
+          // survives on a notification the FCM SDK drew itself.
+          whenMs = notification?.`when`
         }
         activeNotifications.add(activeNotification)
       }
@@ -167,6 +171,9 @@ class ActiveNotificationInfo {
   var actionTypeId: String? = null
   var schedule: NotificationSchedule? = null
   var sound: String? = null
+  /** Notification.when: the event time, or the post time when unset. */
+  @JsonProperty("when")
+  var whenMs: Long? = null
 }
 
 @InvokeArg

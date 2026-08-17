@@ -165,6 +165,35 @@ public class NotificationHandler: NSObject, NotificationHandlerProtocol {
     )
   }
 
+  /// Convert any delivered notification, local or pushed, for getActive
+  /// (toActiveNotification returns nil for pushes, which willPresent and
+  /// didReceive rely on to tell the two apart). `tag` carries the request
+  /// identifier because a push id is not numeric.
+  ///
+  /// The trigger decides the source, not the local map: the map is per
+  /// session, so after a restart a still-displayed local notification is
+  /// no longer in it.
+  func toDeliveredNotification(_ request: UNNotificationRequest) -> ActiveNotification {
+    let local = notificationsMap[request.identifier]
+    var data = [String: String]()
+    for (key, value) in request.content.userInfo {
+      if let keyStr = key as? String, let valStr = value as? String {
+        data[keyStr] = valStr
+      }
+    }
+    return ActiveNotification(
+      id: Int(request.identifier) ?? -1,
+      title: request.content.title,
+      body: request.content.body,
+      sound: local?.sound ?? "",
+      actionTypeId: request.content.categoryIdentifier,
+      attachments: local?.attachments,
+      source: request.trigger is UNPushNotificationTrigger ? "push" : "local",
+      tag: request.identifier,
+      data: data
+    )
+  }
+
   func toPendingNotification(_ request: UNNotificationRequest) -> PendingNotification? {
     guard let notification = notificationsMap[request.identifier],
           let schedule = notification.schedule else {
@@ -194,6 +223,11 @@ struct ActiveNotification: Encodable {
   let actionTypeId: String
   let attachments: [NotificationAttachment]?
   var source: String = "local"
+  /// Request identifier, the handle removeActive addresses it by (named
+  /// after the Android field of the same role). Delivered lists only.
+  var tag: String? = nil
+  /// The notification's userInfo, string values only.
+  var data: [String: String]? = nil
 }
 
 struct ReceivedNotification: Encodable {

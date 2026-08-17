@@ -18,6 +18,24 @@ pub struct PushNotificationResponse {
     pub device_token: String,
 }
 
+/// A delivered notification to remove. `tag` addresses what the id alone
+/// cannot: Android keys tagged notifications by (tag, id), and a pushed
+/// notification on iOS has a non-numeric identifier.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct NotificationIdentifier {
+    pub id: i32,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub tag: Option<String>,
+    /// Remove only while the delivered notification is not newer than
+    /// this (ms). Guards the gap between listing notifications and
+    /// removing them: one that collapses keeps its identifier when a
+    /// newer notification replaces it, so the removal would take the
+    /// replacement down instead.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub max_when: Option<i64>,
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct Attachment {
@@ -281,6 +299,15 @@ pub struct ActiveNotification {
     pub(crate) action_type_id: Option<String>,
     pub(crate) schedule: Option<Schedule>,
     pub(crate) sound: Option<String>,
+    /// "push" or "local" — where the notification came from. iOS only;
+    /// absent where the platform cannot tell.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub(crate) source: Option<String>,
+    /// Android `Notification.when` in ms: the event time a push set, or
+    /// the post time when it set none. Unlike the data payload it also
+    /// survives on a notification the FCM SDK drew itself.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub(crate) when: Option<i64>,
 }
 
 impl ActiveNotification {
@@ -342,6 +369,16 @@ impl ActiveNotification {
     #[must_use]
     pub fn sound(&self) -> Option<&str> {
         self.sound.as_deref()
+    }
+
+    #[must_use]
+    pub fn source(&self) -> Option<&str> {
+        self.source.as_deref()
+    }
+
+    #[must_use]
+    pub const fn when(&self) -> Option<i64> {
+        self.when
     }
 }
 

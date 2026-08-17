@@ -2,18 +2,9 @@
 // preferred wrapper, and serde-deserialized payloads (Vec, String, ...) cannot be borrowed.
 #![allow(clippy::needless_pass_by_value)]
 
-use serde::Deserialize;
 use tauri::{command, plugin::PermissionState, AppHandle, Runtime, State};
 
-use crate::{NotificationData, Notifications, Result};
-
-#[derive(Debug, Deserialize)]
-#[allow(dead_code)]
-pub struct NotificationIdentifier {
-    pub id: i32,
-    #[allow(dead_code)]
-    pub tag: Option<String>,
-}
+use crate::{NotificationData, NotificationIdentifier, Notifications, Result};
 
 #[command]
 pub async fn is_permission_granted<R: Runtime>(
@@ -103,8 +94,7 @@ pub fn remove_active<R: Runtime>(
     notification: State<'_, Notifications<R>>,
     notifications: Vec<NotificationIdentifier>,
 ) -> Result<()> {
-    let ids: Vec<i32> = notifications.into_iter().map(|n| n.id).collect();
-    notification.remove_active(ids)
+    notification.remove_active_identifiers(notifications)
 }
 
 #[command]

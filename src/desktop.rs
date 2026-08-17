@@ -97,6 +97,13 @@ impl<R: Runtime> Notifications<R> {
         )))
     }
 
+    pub fn remove_active_identifiers(
+        &self,
+        _notifications: Vec<crate::models::NotificationIdentifier>,
+    ) -> crate::Result<()> {
+        self.remove_active(Vec::new())
+    }
+
     pub fn remove_all_active(&self) -> crate::Result<()> {
         Err(crate::Error::Io(std::io::Error::other(
             "Removing active notifications is not supported with notify-rust",

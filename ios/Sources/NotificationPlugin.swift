@@ -74,6 +74,9 @@ struct Notification: Decodable {
 
 struct RemoveActiveNotification: Decodable {
   let id: Int
+  let tag: String?
+  /// Remove only while the delivered notification is not newer than this.
+  let maxWhen: Double?
 }
 
 struct RemoveActiveArgs: Decodable {
@@ -359,8 +362,15 @@ class NotificationPlugin: Plugin {
   @objc func removeActive(_ invoke: Invoke) {
     let args = try? invoke.parseArgs(RemoveActiveArgs.self)
     if let args, !args.notifications.isEmpty {
+      // Pushed notifications are keyed by identifier (reported as tag),
+      // locally scheduled ones by their numeric id.
+      if args.notifications.contains(where: { $0.maxWhen != nil }) {
+        removeDeliveredNotNewerThan(args.notifications)
+        invoke.resolve()
+        return
+      }
       UNUserNotificationCenter.current().removeDeliveredNotifications(
-        withIdentifiers: args.notifications.map { String($0.id) })
+        withIdentifiers: args.notifications.map { $0.tag ?? String($0.id) })
     } else {
       UNUserNotificationCenter.current().removeAllDeliveredNotifications()
       DispatchQueue.main.async(execute: {
@@ -370,11 +380,43 @@ class NotificationPlugin: Plugin {
     invoke.resolve()
   }
 
+  /// Resolve the removals against what is delivered right now, skipping
+  /// any that a newer notification has meanwhile replaced — a caller
+  /// working from an earlier getActive cannot tell the two apart, since a
+  /// collapsing notification keeps its identifier.
+  private func removeDeliveredNotNewerThan(_ wanted: [RemoveActiveNotification]) {
+    let center = UNUserNotificationCenter.current()
+    center.getDeliveredNotifications { delivered in
+      var identifiers = [String]()
+      for entry in wanted {
+        let identifier = entry.tag ?? String(entry.id)
+        guard let maxWhen = entry.maxWhen else {
+          identifiers.append(identifier)
+          continue
+        }
+        guard
+          let current = delivered.first(where: {
+            $0.request.identifier == identifier
+          })
+        else { continue }
+        // The push carries the event's own timestamp; a notification
+        // without one cannot be judged and is removed as asked.
+        let sentAt = current.request.content.userInfo["sent_at"]
+        let ts = (sentAt as? String).flatMap(Double.init) ?? (sentAt as? Double)
+        if let ts, ts > maxWhen { continue }
+        identifiers.append(identifier)
+      }
+      if !identifiers.isEmpty {
+        center.removeDeliveredNotifications(withIdentifiers: identifiers)
+      }
+    }
+  }
+
   @objc func getActive(_ invoke: Invoke) {
     UNUserNotificationCenter.current().getDeliveredNotifications(completionHandler: {
       (notifications) in
-      let ret = notifications.compactMap({ (notification) -> ActiveNotification? in
-        return self.notificationHandler.toActiveNotification(
+      let ret = notifications.map({ (notification) -> ActiveNotification in
+        return self.notificationHandler.toDeliveredNotification(
           notification.request)
       })
       invoke.resolve(ret)

@@ -67,6 +67,9 @@ class SetClickListenerActiveArgs {
 class ActiveNotification {
   var id: Int = 0
   var tag: String? = null
+  /** Remove only while the displayed notification's `when` is at or below
+   *  this. Guards against removing one that was replaced in between. */
+  var maxWhen: Long? = null
 }
 
 @InvokeArg
@@ -306,6 +309,7 @@ class NotificationPlugin(private val activity: Activity): Plugin(activity) {
       invoke.resolve()
     } else {
       for (notification in args.notifications) {
+        if (isNewerThan(notification)) continue
         if (notification.tag == null) {
           notificationManager.cancel(notification.id)
         } else {
@@ -314,6 +318,19 @@ class NotificationPlugin(private val activity: Activity): Plugin(activity) {
       }
       invoke.resolve()
     }
+  }
+
+  /** Whether the notification currently displayed under this (tag, id) is
+   *  newer than the caller expected. A collapsing notification keeps both
+   *  across a replacement, so a caller that picked it from an earlier
+   *  getActive would otherwise remove whatever took its place. */
+  private fun isNewerThan(notification: ActiveNotification): Boolean {
+    val maxWhen = notification.maxWhen ?: return false
+    if (Build.VERSION.SDK_INT < Build.VERSION_CODES.M) return false
+    val current = notificationManager.activeNotifications.firstOrNull {
+      it.id == notification.id && it.tag == notification.tag
+    } ?: return false
+    return current.notification.`when` > maxWhen
   }
 
   @Command

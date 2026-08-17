@@ -239,8 +239,7 @@ impl<R: Runtime> crate::NotificationsBuilder<R> {
                     if action.input() {
                         let input_el = doc.CreateElement(&HSTRING::from("input"))?;
                         input_el.SetAttribute(&HSTRING::from("id"), &HSTRING::from(action.id()))?;
-                        input_el
-                            .SetAttribute(&HSTRING::from("type"), &HSTRING::from("text"))?;
+                        input_el.SetAttribute(&HSTRING::from("type"), &HSTRING::from("text"))?;
                         if let Some(placeholder) = action.input_placeholder() {
                             input_el.SetAttribute(
                                 &HSTRING::from("placeHolderContent"),
@@ -261,8 +260,7 @@ impl<R: Runtime> crate::NotificationsBuilder<R> {
                     } else {
                         action.title()
                     };
-                    action_el
-                        .SetAttribute(&HSTRING::from("content"), &HSTRING::from(content))?;
+                    action_el.SetAttribute(&HSTRING::from("content"), &HSTRING::from(content))?;
                     action_el
                         .SetAttribute(&HSTRING::from("arguments"), &HSTRING::from(action.id()))?;
                     let activation_type = if action.foreground() {
@@ -347,6 +345,8 @@ impl<R: Runtime> crate::NotificationsBuilder<R> {
                     action_type_id: self.data.action_type_id.clone(),
                     schedule: self.data.schedule.clone(),
                     sound: self.data.sound.clone(),
+                    source: None,
+                    when: None,
                 };
 
                 toast.Activated(&TypedEventHandler::new(
@@ -539,6 +539,15 @@ impl<R: Runtime> Notifications<R> {
         Ok(())
     }
 
+    /// Like `remove_active`; Windows notifications carry no tag, so the
+    /// ids decide as before.
+    pub fn remove_active_identifiers(
+        &self,
+        notifications: Vec<NotificationIdentifier>,
+    ) -> crate::Result<()> {
+        self.remove_active(notifications.into_iter().map(|n| n.id).collect())
+    }
+
     pub fn remove_active(&self, notifications: Vec<i32>) -> crate::Result<()> {
         let history = ToastNotificationManager::History()?;
         let app_id = &self.plugin.app_id;
@@ -598,6 +607,8 @@ impl<R: Runtime> Notifications<R> {
                 action_type_id: None,
                 schedule: None,
                 sound: None,
+                source: None,
+                when: None,
             });
         }
 

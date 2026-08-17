@@ -4,7 +4,7 @@ use tauri::{
     AppHandle, Runtime,
 };
 
-use crate::models::{ActionType, ActiveNotification, PendingNotification};
+use crate::models::{ActionType, ActiveNotification, NotificationIdentifier, PendingNotification};
 
 use std::{collections::HashMap, sync::Arc};
 
@@ -244,20 +244,27 @@ impl<R: Runtime> Notifications<R> {
     }
 
     pub fn remove_active(&self, notifications: Vec<i32>) -> crate::Result<()> {
+        self.remove_active_identifiers(
+            notifications
+                .into_iter()
+                .map(|id| NotificationIdentifier {
+                    id,
+                    tag: None,
+                    max_when: None,
+                })
+                .collect(),
+        )
+    }
+
+    /// Like `remove_active`, but keeps the tag.
+    pub fn remove_active_identifiers(
+        &self,
+        notifications: Vec<NotificationIdentifier>,
+    ) -> crate::Result<()> {
         validation::require_bundle()?;
 
         let mut args = HashMap::new();
-        args.insert(
-            "notifications",
-            notifications
-                .into_iter()
-                .map(|id| {
-                    let mut notification = HashMap::new();
-                    notification.insert("id", id);
-                    notification
-                })
-                .collect::<Vec<HashMap<&str, i32>>>(),
-        );
+        args.insert("notifications", notifications);
         self.plugin
             .removeActive(
                 serde_json::to_string(&args)

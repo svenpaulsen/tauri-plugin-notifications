@@ -7,7 +7,8 @@ use tauri::{
 #[cfg(feature = "push-notifications")]
 use crate::models::PushNotificationResponse;
 use crate::models::{
-    ActionType, ActiveNotification, Channel, PendingNotification, PermissionResponse,
+    ActionType, ActiveNotification, Channel, NotificationIdentifier, PendingNotification,
+    PermissionResponse,
 };
 
 use std::collections::HashMap;
@@ -112,18 +113,26 @@ impl<R: Runtime> Notifications<R> {
     }
 
     pub fn remove_active(&self, notifications: Vec<i32>) -> crate::Result<()> {
-        let mut args = HashMap::new();
-        args.insert(
-            "notifications",
+        self.remove_active_identifiers(
             notifications
                 .into_iter()
-                .map(|id| {
-                    let mut notification = HashMap::new();
-                    notification.insert("id", id);
-                    notification
+                .map(|id| NotificationIdentifier {
+                    id,
+                    tag: None,
+                    max_when: None,
                 })
-                .collect::<Vec<HashMap<&str, i32>>>(),
-        );
+                .collect(),
+        )
+    }
+
+    /// Like `remove_active`, but keeps the tag: both platforms need it to
+    /// address a notification that was displayed from a push.
+    pub fn remove_active_identifiers(
+        &self,
+        notifications: Vec<NotificationIdentifier>,
+    ) -> crate::Result<()> {
+        let mut args = HashMap::new();
+        args.insert("notifications", notifications);
         self.0
             .run_mobile_plugin("removeActive", args)
             .map_err(Into::into)
