@@ -440,13 +440,34 @@ class NotificationPlugin(private val activity: Activity): Plugin(activity) {
       return
     }
 
-    FirebaseMessaging.getInstance().deleteToken().addOnCompleteListener { task ->
+    val messaging = firebaseMessaging()
+    if (messaging == null) {
+      invoke.reject("Firebase Messaging is not available on this device")
+      return
+    }
+    messaging.deleteToken().addOnCompleteListener { task ->
       if (!task.isSuccessful) {
         invoke.reject("Failed to delete FCM token: ${task.exception?.message}")
         return@addOnCompleteListener
       }
       cachedToken = null
       invoke.resolve()
+    }
+  }
+
+  /**
+   * `FirebaseMessaging.getInstance()` throws instead of returning null when
+   * Firebase could not initialize (no `google-services.json` in the build,
+   * a broken Play Services install, or the FirebaseApp content provider
+   * having failed) — an uncaught exception inside a plugin command takes
+   * the whole app process down. Callers reject the invoke instead.
+   */
+  private fun firebaseMessaging(): FirebaseMessaging? {
+    return try {
+      FirebaseMessaging.getInstance()
+    } catch (e: Exception) {
+      Logger.error(Logger.tags(TAG), "FirebaseMessaging unavailable: ${e.message}", e)
+      null
     }
   }
 
@@ -469,7 +490,17 @@ class NotificationPlugin(private val activity: Activity): Plugin(activity) {
       return
     }
 
-    FirebaseMessaging.getInstance().token.addOnCompleteListener { task ->
+    val messaging = firebaseMessaging()
+    if (messaging == null) {
+      val errorMessage = "Failed to get FCM token: Firebase Messaging is not available"
+      val errorData = JSObject()
+      errorData.put("message", errorMessage)
+      trigger("push-error", errorData)
+      pendingTokenInvoke?.reject(errorMessage)
+      pendingTokenInvoke = null
+      return
+    }
+    messaging.token.addOnCompleteListener { task ->
       if (!task.isSuccessful) {
         val errorMessage = "Failed to get FCM token: ${task.exception?.message}"
         val errorData = JSObject()
