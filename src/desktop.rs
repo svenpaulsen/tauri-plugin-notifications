@@ -21,7 +21,11 @@ pub fn init<R: Runtime, C: DeserializeOwned>(
 pub struct Notifications<R: Runtime>(AppHandle<R>);
 
 // `async` and `Result` mirror the mobile/macOS plugin API so callers can `.await` and `?` uniformly.
-#[allow(clippy::unused_async, clippy::unnecessary_wraps)]
+#[allow(
+    clippy::unused_async,
+    clippy::unused_async_trait_impl,
+    clippy::unnecessary_wraps
+)]
 impl<R: Runtime> crate::NotificationsBuilder<R> {
     pub async fn show(self) -> crate::Result<()> {
         let mut notification = imp::Notification::new(self.app.config().identifier.clone());
@@ -47,7 +51,7 @@ impl<R: Runtime> crate::NotificationsBuilder<R> {
 }
 
 // `async` mirrors the mobile/macOS plugin API so callers can `.await` uniformly.
-#[allow(clippy::unused_async)]
+#[allow(clippy::unused_async, clippy::unused_async_trait_impl)]
 impl<R: Runtime> Notifications<R> {
     pub fn builder(&self) -> NotificationsBuilder<R> {
         NotificationsBuilder::new(self.0.clone())
