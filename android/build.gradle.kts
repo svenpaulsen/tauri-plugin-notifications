@@ -62,8 +62,11 @@ dependencies {
     implementation("com.google.android.material:material:1.13.0")
     implementation("com.fasterxml.jackson.core:jackson-databind:2.22.2")
 
-    implementation(platform("com.google.firebase:firebase-bom:34.18.0"))
-    implementation("com.google.firebase:firebase-messaging-ktx:24.1.2")
+    // `api`, not `implementation`: PushDataHandler.onPushData takes a
+    // RemoteMessage, so an app implementing the interface compiles
+    // against Firebase Messaging through this module.
+    api(platform("com.google.firebase:firebase-bom:34.18.0"))
+    api("com.google.firebase:firebase-messaging-ktx:24.1.2")
     testImplementation("junit:junit:4.13.2")
     testImplementation("io.mockk:mockk-android:1.14.9")
     testImplementation("io.mockk:mockk-agent:1.14.9")

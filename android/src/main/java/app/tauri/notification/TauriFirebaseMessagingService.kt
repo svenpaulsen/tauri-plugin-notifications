@@ -1,5 +1,6 @@
 package app.tauri.notification
 
+import android.util.Log
 import app.tauri.plugin.JSObject
 import com.google.firebase.messaging.FirebaseMessagingService
 import com.google.firebase.messaging.RemoteMessage
@@ -37,8 +38,23 @@ class TauriFirebaseMessagingService : FirebaseMessagingService() {
     message.from?.let { pushData["from"] = it }
     pushData["sentTime"] = message.sentTime
 
-    // Trigger push-message event
+    // Trigger push-message event. `instance` is null when FCM started the
+    // process without the WebView — the event is then simply dropped.
     NotificationPlugin.instance?.triggerPushMessage(pushData)
+
+    // Hand the data payload to the app's native handler (see
+    // PushDataHandler). This is the only path that reaches the app when
+    // the WebView is not running or is paused in the background, so a
+    // handler failure must never take the service down with it.
+    if (message.data.isNotEmpty()) {
+      PushDataHandlers.fromManifest(applicationContext)?.let { handler ->
+        try {
+          handler.onPushData(applicationContext, message, PushDataHandlers.isAppVisible())
+        } catch (e: Exception) {
+          Log.e("PushDataHandler", "push data handler failed", e)
+        }
+      }
+    }
 
     // Also auto-show notification if notification payload exists
     val notification = message.notification

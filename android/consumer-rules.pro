@@ -6,3 +6,10 @@
 
 -keep enum app.tauri.notification.Importance { *; }
 -keep enum app.tauri.notification.Visibility { *; }
+
+# Apps name their PushDataHandler in the manifest and the service loads it
+# with Class.forName — keep the interface and every implementation (with
+# its no-argument constructor) through R8, or release builds silently lose
+# the handler.
+-keep interface app.tauri.notification.PushDataHandler
+-keep class * implements app.tauri.notification.PushDataHandler { <init>(); }

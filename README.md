@@ -390,6 +390,41 @@ try {
 }
 ```
 
+#### Native Push Data Handler (Android)
+
+A data-only FCM message (one without a `notification` block) is not
+displayed by the system; the plugin forwards it to the WebView as a
+`push-message` event. When FCM starts the app process without the WebView,
+or the WebView is paused in the background, that event has no receiver.
+Apps that need to act on such messages natively — decrypt an end-to-end
+encrypted payload and show it, raise an incoming-call notification, … —
+implement `app.tauri.notification.PushDataHandler` in their Android module
+and register the class in the manifest:
+
+```xml
+<application>
+  <meta-data
+    android:name="app.tauri.notification.PUSH_DATA_HANDLER"
+    android:value="com.example.app.MyPushDataHandler" />
+</application>
+```
+
+```kotlin
+class MyPushDataHandler : PushDataHandler {
+  override fun onPushData(context: Context, message: RemoteMessage, appVisible: Boolean) {
+    if (appVisible) return // the WebView already got the push-message event
+    // decrypt message.data, then post a notification via NotificationManager
+  }
+}
+```
+
+The handler is instantiated once per process (public no-argument
+constructor required) and called on the FCM service thread for every
+message with a non-empty `data` payload, after the `push-message` event
+was emitted. `appVisible` is true while one of the app's activities is on
+screen. Exceptions thrown by the handler are logged and never crash the
+service. Without the meta-data entry the plugin behaves exactly as before.
+
 ### Rust
 
 ```rust
