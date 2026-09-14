@@ -434,7 +434,10 @@ class NotificationPlugin: Plugin {
   }
 }
 
+// `public`: Xcode 27's Swift internalizes internal `@_cdecl` symbols in
+// release builds, and swift-rs can only promote them back with rustup's
+// llvm-objcopy. Exporting the entry point properly needs neither.
 @_cdecl("init_plugin_notification")
-func initPlugin() -> Plugin {
+public func initPlugin() -> Plugin {
   return NotificationPlugin()
 }

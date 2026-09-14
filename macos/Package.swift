@@ -17,7 +17,7 @@ let swiftSettings: [SwiftSetting] = [
 let package = Package(
     name: "tauri-plugin-notifications",
     platforms: [
-        .macOS(.v13),
+        .macOS(.v12),
         .iOS(.v15),
     ],
     products: [
