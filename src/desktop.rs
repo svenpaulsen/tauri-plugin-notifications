@@ -240,7 +240,11 @@ mod imp {
                 });
             }
 
-            tauri::async_runtime::spawn(async move {
+            // `show()` is synchronous and, with zbus built on tokio (any
+            // host crate that enables that feature, e.g. ashpd), blocks on
+            // zbus' own runtime — which panics on a tokio worker thread.
+            // The blocking pool is the one place that is allowed.
+            tauri::async_runtime::spawn_blocking(move || {
                 let _ = notification.show();
             });
 
